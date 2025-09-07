@@ -116,7 +116,7 @@ const listenPort: number = parseInt(process.env.PORT) || 4455
 const app = express()
 const httpServer = new http.Server(app)
 
-const io = new socketio.Server(httpServer, { allowEIO3: true })
+const io = new socketio.Server(httpServer, { allowEIO3: true, pingTimeout: 500, pingInterval: 500 })
 const socketupdates_Settings: string[] = [
 	'sources',
 	'devices',
@@ -261,6 +261,8 @@ function initialSetup() {
 	let tmpSocketAccessTokens: string[] = []
 	io.sockets.on('connection', (socket) => {
 		const ipAddr = socket.handshake.address
+
+		let timer: NodeJS.Timer | null = null
 
 		const requireRole = (role: string) => {
 			return new Promise((resolve, reject) => {
@@ -433,6 +435,10 @@ function initialSetup() {
 			} else {
 				socket.leave('messaging')
 			}
+
+			timer = setInterval(() => {
+				socket.emit('device_states', getDeviceStates(deviceId))
+			}, 500)
 
 			socket.emit('bus_options', currentConfig.bus_options)
 			socket.emit('devices', devices)
@@ -1045,7 +1051,10 @@ function initialSetup() {
 				})
 		})
 
-		socket.on('disconnect', () => {
+		socket.on('disconnect', (reason) => {
+			clearInterval(timer)
+			logger(`socket disconnectd. reason: ${reason}`, 'info')
+
 			// emitted when any socket.io client disconnects from the server
 			DeactivateListenerClient(socket.id)
 			CheckCloudClients(socket.id)
@@ -1362,7 +1371,8 @@ function UpdateDeviceState(deviceId: string) {
 			for (let i = 0; i < deviceSources.length; i++) {
 				let deviceSource = deviceSources[i]
 
-				if (currentSourceTallyData?.[deviceSource.sourceId]?.includes(bus.id)) { //if the current source tally data includes this bus
+				if (currentSourceTallyData?.[deviceSource.sourceId]?.includes(bus.id)) {
+					//if the current source tally data includes this bus
 					//if the current source tally data includes this bus
 					//console.log('pushing', bus.label);
 					currentDeviceTallyData[device.id].push(bus.id)
